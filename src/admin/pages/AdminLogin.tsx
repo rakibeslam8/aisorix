@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -18,13 +17,6 @@ export default function AdminLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [bootstrapped, setBootstrapped] = useState(false);
-
-  // Idempotently seed owner account on first visit
-  useEffect(() => {
-    if (bootstrapped) return;
-    supabase.functions.invoke("admin-bootstrap").finally(() => setBootstrapped(true));
-  }, [bootstrapped]);
 
   // Auto-route if already an admin
   useEffect(() => {

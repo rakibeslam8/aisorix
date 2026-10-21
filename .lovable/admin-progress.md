@@ -10,7 +10,7 @@
 
 ## Notes
 - Stack: Supabase Postgres + Edge Functions + Realtime.
-- Owner `support@aisorix.com` seeded by `admin-bootstrap` on first /admin/login visit.
+- Owner `support@aisorix.com` already exists in the database. (`admin-bootstrap` is disabled and returns 410.)
 - Email gating: `*@aisorix.com` + role in `user_roles`.
 - Roles: `admin_super` (full), `admin_manager` (write), `admin_viewer` (read-only). Legacy `admin` treated as super.
 - All writes audited via `_shared/adminAuth.ts` → `audit_logs`.
