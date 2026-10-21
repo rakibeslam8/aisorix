@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveCharge } from "../_shared/pricing.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,6 +17,7 @@ const WEBHOOK_URL = `${SUPABASE_URL}/functions/v1/payment-webhook`;
 const INTERNAL_WEBHOOK_SECRET = Deno.env.get("INTERNAL_WEBHOOK_SECRET");
 
 interface PaymentRequest {
+  couponCode?: string | null;
   action: 'grant_token' | 'create_payment' | 'execute_payment' | 'query_payment';
   userId?: string;
   planId?: string;
@@ -167,7 +169,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const body: PaymentRequest = await req.json();
-    const { action, userId, planId, planName, amount, billingCycle, paymentID } = body;
+    const { action, userId, planId, planName, billingCycle, paymentID, couponCode } = body;
     const origin = req.headers.get("origin") || "";
 
     // Validate userId matches authenticated user
@@ -195,10 +197,23 @@ const handler = async (req: Request): Promise<Response> => {
       }
 
       case 'create_payment': {
-        if (!userId || !planId || !planName || !amount || !billingCycle) {
+        if (!userId || !planId || !planName || !billingCycle) {
           return new Response(
             JSON.stringify({ success: false, error: "Missing required fields" }),
             { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+          );
+        }
+
+        // Never trust the client's plan price / amount: recompute it on the server.
+        const pricingClient = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        );
+        const charge = await resolveCharge(pricingClient, planId, billingCycle, couponCode);
+        if (!charge.ok) {
+          return new Response(
+            JSON.stringify({ success: false, error: charge.error }),
+            { status: charge.status, headers: { "Content-Type": "application/json", ...corsHeaders } }
           );
         }
 
@@ -210,7 +225,7 @@ const handler = async (req: Request): Promise<Response> => {
           );
         }
 
-        const result = await createPayment(token, amount, planId, planName, billingCycle, userId, origin);
+        const result = await createPayment(token, charge.amount, planId, planName, billingCycle, userId, origin);
 
         if (result.bkashURL && result.paymentID) {
           // Persist the trusted plan/amount keyed by bKash paymentID so execute_payment
@@ -224,11 +239,11 @@ const handler = async (req: Request): Promise<Response> => {
             external_id: result.paymentID,
             user_id: user.id,
             plan_id: planId,
-            amount,
+            amount: charge.amount,
             currency: 'BDT',
             billing_cycle: billingCycle,
             status: 'pending',
-            metadata: { plan_name: planName },
+            metadata: { plan_name: planName, base_amount: charge.baseAmount, discount: charge.discount, coupon_code: charge.couponCode },
           });
           if (intentErr) {
             console.error('Failed to persist bKash payment intent:', intentErr);
