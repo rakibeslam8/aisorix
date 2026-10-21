@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveCharge } from "../_shared/pricing.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,6 +20,7 @@ interface PaymentRequest {
   customerEmail: string;
   billingCycle: 'monthly' | 'yearly';
   origin: string;
+  couponCode?: string | null;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -62,7 +64,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const body: PaymentRequest = await req.json();
-    const { userId, planId, planName, amount, currency, customerName, customerEmail, billingCycle, origin } = body;
+    const { userId, planId, planName, customerName, customerEmail, billingCycle, origin, couponCode } = body;
 
     // Validate userId matches authenticated user
     if (userId !== user.id) {
@@ -72,16 +74,8 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Convert amount to cents (Stripe uses smallest currency unit)
-    const amountInCents = Math.round(amount * 100);
-    
-    // Map currency symbol to ISO code
-    const currencyCode = currency === "৳" || currency === "BDT" ? "bdt" : 
-                         currency === "$" || currency === "USD" ? "usd" : 
-                         currency.toLowerCase();
-
-    // Generate unique transaction ID
-    const tranId = `SORIX_STRIPE_${planId.toUpperCase()}_${Date.now()}`;
+    // Prices are defined server-side in BDT only.
+    const currencyCode = "bdt";
 
     // Persist trusted intent BEFORE creating the Stripe session. The webhook will
     // verify the Stripe session and cross-check against this server-side row.
@@ -89,6 +83,18 @@ const handler = async (req: Request): Promise<Response> => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+    // Never trust the client's plan price / amount: recompute it on the server.
+    const charge = await resolveCharge(admin, planId, billingCycle, couponCode);
+    if (!charge.ok) {
+      return new Response(
+        JSON.stringify({ success: false, error: charge.error }),
+        { status: charge.status, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+    const amount = charge.amount;
+    // Stripe uses the smallest currency unit
+    const amountInCents = Math.round(amount * 100);
+    const tranId = `SORIX_STRIPE_${planId.toUpperCase()}_${Date.now()}`;
     const { error: intentErr } = await admin.from('payment_intents').insert({
       gateway: 'stripe',
       external_id: tranId,
@@ -98,7 +104,7 @@ const handler = async (req: Request): Promise<Response> => {
       currency: currencyCode.toUpperCase(),
       billing_cycle: billingCycle,
       status: 'pending',
-      metadata: { plan_name: planName },
+      metadata: { plan_name: planName, base_amount: charge.baseAmount, discount: charge.discount, coupon_code: charge.couponCode },
     });
     if (intentErr) {
       console.error('Failed to persist Stripe payment intent:', intentErr);

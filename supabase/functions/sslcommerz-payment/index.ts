@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveCharge } from "../_shared/pricing.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -62,7 +63,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const body = await req.json();
-    const { userId, planId, planName, amount, currency, customerName, customerEmail, customerPhone, billingCycle, origin } = body;
+    const { userId, planId, planName, customerName, customerEmail, customerPhone, billingCycle, origin, couponCode } = body;
 
     // Validate userId matches authenticated user
     if (userId !== user.id) {
@@ -72,16 +73,23 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Generate unique transaction ID
-    const tranId = `SORIX_${planId.toUpperCase()}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
     // Persist trusted payment intent BEFORE redirecting the user. The IPN handler
     // will look this up by tran_id and ignore the user-controlled value_a/value_b fields.
     const admin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-    const normalizedCurrency = currency === "৳" ? "BDT" : currency;
+    // Never trust the client's plan price / amount: recompute it on the server.
+    const charge = await resolveCharge(admin, planId, billingCycle, couponCode);
+    if (!charge.ok) {
+      return new Response(
+        JSON.stringify({ success: false, error: charge.error }),
+        { status: charge.status, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+    const amount = charge.amount;
+    const normalizedCurrency = charge.currency;
+    const tranId = `SORIX_${planId.toUpperCase()}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const { error: intentErr } = await admin.from('payment_intents').insert({
       gateway: 'sslcommerz',
       external_id: tranId,
@@ -91,7 +99,7 @@ const handler = async (req: Request): Promise<Response> => {
       currency: normalizedCurrency,
       billing_cycle: billingCycle,
       status: 'pending',
-      metadata: { plan_name: planName },
+      metadata: { plan_name: planName, base_amount: charge.baseAmount, discount: charge.discount, coupon_code: charge.couponCode },
     });
     if (intentErr) {
       console.error('Failed to persist SSLCommerz payment intent:', intentErr);
