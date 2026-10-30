@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getPromptAddendum, withAdminPrompt } from "../_shared/promptTemplates.ts";
 import { getPlanLimits } from "../_shared/planLimits.ts";
 import { modelPolicy } from "../_shared/models.ts";
 import {
@@ -244,7 +245,10 @@ serve(async (req) => {
     };
 
     // Generate system prompt with actual model name
-    const systemPrompt = getSystemPrompt(modelName || 'AI Assistant');
+    const systemPrompt = withAdminPrompt(
+      getSystemPrompt(modelName || 'AI Assistant'),
+      await getPromptAddendum(admin, 'chat'),
+    );
 
     // Prepare messages with system prompt
     let processedMessages = [

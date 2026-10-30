@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getPromptAddendum, withAdminPrompt } from "../_shared/promptTemplates.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -244,7 +245,7 @@ serve(async (req) => {
     const model = 'google/gemma-3n-e4b-it';
 
     const processedMessages = [
-      { role: 'system', content: AGRO_SYSTEM_PROMPT },
+      { role: 'system', content: withAdminPrompt(AGRO_SYSTEM_PROMPT, await getPromptAddendum(createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!), 'agro')) },
       ...(messages || []).filter((m: { role: string }) => m.role !== 'system'),
     ];
 
