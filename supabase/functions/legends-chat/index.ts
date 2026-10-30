@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getPromptAddendum, withAdminPrompt } from "../_shared/promptTemplates.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -243,7 +244,7 @@ serve(async (req) => {
 - Do NOT include <think> tags or reasoning blocks in your response.`;
 
     const processedMessages = [
-      { role: 'system', content: fullPrompt },
+      { role: 'system', content: withAdminPrompt(fullPrompt, await getPromptAddendum(serviceClient, 'legends')) },
       ...(messages || []).filter((m: { role: string }) => m.role !== 'system'),
     ];
 
