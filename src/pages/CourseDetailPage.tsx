@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -17,9 +17,9 @@ import {
 import { toast } from "sonner";
 import SEOHead from "@/components/SEOHead";
 import ContactModal from "@/components/academy/ContactModal";
-import { supabase } from "@/integrations/supabase/client";
 import ScholarsEnrollButton from "@/components/scholars/ScholarsEnrollButton";
-import { getCourse } from "@/data/academy";
+import { useCourse } from "@/hooks/useScholarsCatalog";
+import { canonicalCourseSlug, formatBdtBn } from "@/lib/scholarsCatalog";
 import courseCover from "@/assets/course-prompt.jpg";
 import mentorImg from "@/assets/founder-rakib.jpg.asset.json";
 
@@ -147,7 +147,6 @@ const CURRICULUM: { title: string; lessons: string[] }[] = [
   },
 ];
 
-const TOTAL_LESSONS = CURRICULUM.reduce((s, m) => s + m.lessons.length, 0);
 
 const FAQS = [
   { q: "কোডিং না জানলে কি কোর্সটি করা যাবে?", a: "হ্যাঁ। সম্পূর্ণ কোর্সটি no-code, শুধু AI টুল ব্যবহার শেখানো হবে।" },
@@ -161,21 +160,27 @@ const FAQS = [
 
 export default function CourseDetailPage() {
   const { slug = "" } = useParams();
-  const course = getCourse(slug);
+  const { course, isLoading } = useCourse(slug);
   const [openModule, setOpenModule] = useState<number | null>(0);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [modalOpen, setModalOpen] = useState(false);
   const [promo, setPromo] = useState("");
-  const [dbCourse, setDbCourse] = useState<any>(null);
-  // Load DB price for secure server-side checkout
-  // (falls back to free / contact flow if missing)
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useEffect(() => {
-    supabase.from("courses").select("id, slug, title, price_bdt").eq("slug", slug).maybeSingle()
-      .then(({ data }) => setDbCourse(data));
-  }, [slug]);
-
+  if (canonicalCourseSlug(slug) !== slug) return <Navigate to={`/sorixscholars/courses/${canonicalCourseSlug(slug)}`} replace />;
+  if (isLoading) return <div className="min-h-[60vh] bg-[#0a1530]" />;
+  // Not published (or deleted) in the admin => not live.
   if (!course) return <Navigate to="/sorixscholars/courses" replace />;
+
+  // Admin-edited content wins; the hand-written Bangla copy is used only for the original course
+  // when the admin has not filled the matching field.
+  const rich = course.hasRichContent;
+  const problems = rich ? PROBLEMS : [];
+  const learnings = course.outcomesFromDb
+    ? course.outcomes.map((t) => ({ title: t, desc: "" }))
+    : rich ? LEARNINGS : [];
+  const curriculum = course.curriculumFromDb ? course.curriculum : rich ? CURRICULUM : [];
+  const faqs = course.faqsFromDb ? course.faqs : rich ? FAQS : [];
+  const totalLessons = curriculum.reduce((sum, m) => sum + m.lessons.length, 0);
+  const discountPct = course.oldPriceBdt ? Math.round((1 - course.priceBdt / course.oldPriceBdt) * 100) : 0;
 
 
   const scrollTo = (id: string) => {
@@ -228,11 +233,11 @@ export default function CourseDetailPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-blue-400" /> ভর্তি হন এখনই
             </div>
             <h1 className="mt-6 text-5xl sm:text-6xl lg:text-7xl font-bold leading-[1.05] tracking-tight" style={displayFont}>
-              AI for<br />Professionals
+              {course.title}
             </h1>
             <div className="mt-6 pl-4 border-l-2 border-blue-400/60">
               <p className="text-lg text-blue-100/90 leading-relaxed" style={bnFont}>
-                অফিসের real কাজ মাথায় রেখে তৈরি practical masterclass। Email, report, presentation, research আর team workflow - সব কিছু দ্রুত, smart এবং professionalভাবে করার clear roadmap পাবেন।
+                {course.tagline}
               </p>
             </div>
             <div className="mt-8 flex flex-wrap gap-3">
@@ -277,13 +282,14 @@ export default function CourseDetailPage() {
       </section>
 
       {/* ============ 2. PROBLEMS ============ */}
+      {problems.length > 0 && (
       <section className="bg-[#f6f7fb] py-20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-center text-3xl sm:text-4xl font-bold text-[#0a1530]" style={displayFont}>
             এই সমস্যাগুলোর সাথে কি আপনি রিলেট করতে পারছেন?
           </h2>
           <div className="mt-12 grid sm:grid-cols-2 gap-5">
-            {PROBLEMS.map((p) => (
+            {problems.map((p) => (
               <div key={p} className="flex gap-4 rounded-2xl bg-white border-l-[3px] border-rose-400 p-6 shadow-sm">
                 <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center flex-shrink-0">
                   <AlertCircle className="w-5 h-5 text-rose-500" />
@@ -297,8 +303,10 @@ export default function CourseDetailPage() {
           </div>
         </div>
       </section>
+      )}
 
       {/* ============ 3. LEARNINGS ============ */}
+      {learnings.length > 0 && (
       <section
         className="py-20 text-white"
         style={{
@@ -320,7 +328,7 @@ export default function CourseDetailPage() {
           </h2>
           <div className="mx-auto mt-3 h-px w-20 bg-white/30" />
           <div className="mt-12 grid sm:grid-cols-2 gap-5">
-            {LEARNINGS.map((l) => (
+            {learnings.map((l) => (
               <div key={l.title} className="flex gap-4 rounded-2xl bg-white/[0.03] border border-white/10 p-6 hover:border-blue-400/40 transition">
                 <div className="w-11 h-11 rounded-xl bg-blue-500/10 border border-blue-400/30 flex items-center justify-center flex-shrink-0">
                   <PlayCircle className="w-5 h-5 text-blue-300" />
@@ -334,6 +342,7 @@ export default function CourseDetailPage() {
           </div>
         </div>
       </section>
+      )}
 
       {/* ============ 4. SUMMARY + PERKS ============ */}
       <section className="bg-gradient-to-b from-[#f6f7fb] to-white py-20">
@@ -342,12 +351,22 @@ export default function CourseDetailPage() {
           <div className="rounded-3xl bg-white/80 backdrop-blur border border-slate-200 p-8 lg:p-10 shadow-sm">
             <h2 className="text-3xl font-bold text-[#0a1530]" style={displayFont}>কোর্স সামারি</h2>
             <p className="mt-5 text-[#0a1530]/80 leading-relaxed" style={bnFont}>
-              AI ফর প্রফেশনালস হলো ১৫ দিনের hands-on masterclass। এখানে আপনি research, writing, presentation, meeting আর automation - সবকিছু job context-এ practicalভাবে step-by-step শিখবেন।
+              {course.overview || course.tagline}
             </p>
             <div className="mt-6 grid sm:grid-cols-2 gap-3">
-              <Stat big="১৫ দিনের" small="execution roadmap" />
-              <Stat big="৫টি" small="practical module" />
-              <Stat big="১৫টি" small="office use-case class" />
+              {rich ? (
+                <>
+                  <Stat big="১৫ দিনের" small="execution roadmap" />
+                  <Stat big="৫টি" small="practical module" />
+                  <Stat big="১৫টি" small="office use-case class" />
+                </>
+              ) : (
+                <>
+                  <Stat big={`${toBn(curriculum.length)}টি`} small="মডিউল" />
+                  <Stat big={`${toBn(totalLessons)}টি`} small="ক্লাস" />
+                  <Stat big={course.level} small={course.duration || "লেভেল"} />
+                </>
+              )}
               <Stat big="লাইফটাইম অ্যাক্সেস" small="কোর্সে লাইফ টাইম এক্সেস" />
               <div className="sm:col-span-2 rounded-2xl bg-white border border-slate-200 p-5 flex items-center justify-between">
                 <div>
@@ -378,6 +397,7 @@ export default function CourseDetailPage() {
       </section>
 
       {/* ============ 5. CURRICULUM ============ */}
+      {curriculum.length > 0 && (
       <section
         id="curriculum"
         className="relative py-20 text-white"
@@ -397,7 +417,7 @@ export default function CourseDetailPage() {
           </h2>
           <div className="mt-5 flex justify-center">
             <span className="px-5 py-2 rounded-full bg-blue-500/10 border border-blue-400/30 text-blue-200 text-sm" style={bnFont}>
-              মোট {toBn(CURRICULUM.length)} টি মডিউল • {toBn(TOTAL_LESSONS)} টি ক্লাস
+              মোট {toBn(curriculum.length)} টি মডিউল • {toBn(totalLessons)} টি ক্লাস
             </span>
           </div>
 
@@ -405,7 +425,7 @@ export default function CourseDetailPage() {
             {/* vertical line */}
             <div className="absolute left-5 sm:left-7 top-4 bottom-4 w-px bg-blue-400/20" />
             <div className="space-y-4">
-              {CURRICULUM.map((m, i) => {
+              {curriculum.map((m, i) => {
                 const open = openModule === i;
                 return (
                   <div key={m.title} className="relative">
@@ -447,6 +467,7 @@ export default function CourseDetailPage() {
           </div>
         </div>
       </section>
+      )}
 
       {/* ============ 6. MENTOR ============ */}
       <section className="bg-gradient-to-b from-[#f6f7fb] to-white pt-20">
@@ -468,20 +489,21 @@ export default function CourseDetailPage() {
             </h3>
             <p className="mt-3 text-blue-300" style={bnFont}>{course.instructor.role}</p>
             <p className="mt-6 text-blue-100/80 leading-relaxed" style={bnFont}>
-              AI এবং টেকনোলজি নিয়ে কাজ করার দীর্ঘ অভিজ্ঞতা থেকে তিনি এই কোর্সটি এমনভাবে সাজিয়েছেন যেনো যে কেউ খুব সহজেই AI শিখে নিজের কাজগুলো দ্রুত এবং প্রোডাক্টিভ করে তুলতে পারেন।
+              {course.instructor.bio}
             </p>
           </div>
         </div>
       </section>
 
       {/* ============ 7. FAQ ============ */}
+      {faqs.length > 0 && (
       <section className="bg-[#f6f7fb] py-20">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-center text-3xl sm:text-4xl font-bold text-[#0a1530]" style={displayFont}>
             সচরাচর জিজ্ঞাসিত প্রশ্নাবলী
           </h2>
           <div className="mt-10 space-y-3">
-            {FAQS.map((f, i) => {
+            {faqs.map((f, i) => {
               const open = openFaq === i;
               return (
                 <div key={f.q} className="rounded-2xl bg-white border border-slate-200 overflow-hidden">
@@ -501,6 +523,7 @@ export default function CourseDetailPage() {
           </div>
         </div>
       </section>
+      )}
 
       {/* ============ 8. ENROLL ============ */}
       <section id="enroll" className="bg-gradient-to-b from-white to-[#f6f7fb] py-20">
@@ -522,14 +545,10 @@ export default function CourseDetailPage() {
               <div>
                 <h3 className="text-xl font-bold" style={bnFont}>কোর্সে যা যা পাচ্ছেন:</h3>
                 <ul className="mt-6 space-y-4">
-                  {[
-                    "১৫ দিনের structured learning roadmap",
-                    "প্রতিটি ক্লাসে practical use-case walkthrough",
-                    "Office-ready prompt, doc, presentation workflow",
-                    "টুল বাছাই + real কাজে apply করার clear system",
-                    "কোর্সে লাইফটাইম অ্যাক্সেস",
-                    "কোর্স শেষে সার্টিফিকেট",
-                  ].map((t) => (
+                  {(rich
+                    ? ["১৫ দিনের structured learning roadmap","প্রতিটি ক্লাসে practical use-case walkthrough","Office-ready prompt, doc, presentation workflow","টুল বাছাই + real কাজে apply করার clear system","কোর্সে লাইফটাইম অ্যাক্সেস","কোর্স শেষে সার্টিফিকেট"]
+                    : [...course.outcomes.slice(0, 4), "কোর্সে লাইফটাইম অ্যাক্সেস", "কোর্স শেষে সার্টিফিকেট"]
+                  ).map((t) => (
                     <li key={t} className="flex items-start gap-3">
                       <CheckCircle2 className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
                       <span className="text-blue-50/90" style={bnFont}>{t}</span>
@@ -539,12 +558,16 @@ export default function CourseDetailPage() {
               </div>
 
               <div>
-                <div className="flex items-center gap-3">
-                  <span className="text-blue-200/60 line-through text-lg" style={bnFont}>৳৮৭০</span>
-                  <span className="px-2.5 py-1 rounded-full bg-rose-500 text-white text-xs font-bold" style={bnFont}>০% ছাড়</span>
-                </div>
+                {course.oldPriceBdt ? (
+                  <div className="flex items-center gap-3">
+                    <span className="text-blue-200/60 line-through text-lg" style={bnFont}>৳{formatBdtBn(course.oldPriceBdt)}</span>
+                    {discountPct > 0 && (
+                      <span className="px-2.5 py-1 rounded-full bg-rose-500 text-white text-xs font-bold" style={bnFont}>{formatBdtBn(discountPct)}% ছাড়</span>
+                    )}
+                  </div>
+                ) : null}
                 <div className="mt-2 text-6xl sm:text-7xl font-bold tracking-tight" style={displayFont}>
-                  <span className="text-blue-300 text-3xl align-top mr-1">৳</span>৮৭০
+                  {course.priceBdt > 0 ? (<><span className="text-blue-300 text-3xl align-top mr-1">৳</span>{formatBdtBn(course.priceBdt)}</>) : "ফ্রি"}
                 </div>
 
                 <div className="mt-6 flex gap-2">
@@ -573,7 +596,7 @@ export default function CourseDetailPage() {
                     kind="course"
                     slug={course.slug}
                     title={course.title}
-                    priceBdt={dbCourse ? Number(dbCourse.price_bdt) : 0}
+                    priceBdt={course.priceBdt}
                     className="w-full text-lg py-4 rounded-2xl"
                   />
                 </div>

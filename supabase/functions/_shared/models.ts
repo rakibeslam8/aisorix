@@ -59,7 +59,7 @@ export interface ModelPolicy {
 }
 
 export function modelPolicy(model: string, plan: PlanId): ModelPolicy {
-  const info = Object.hasOwn(MODEL_CATALOG, model) ? MODEL_CATALOG[model] : undefined;
+  const info = Object.prototype.hasOwnProperty.call(MODEL_CATALOG, model) ? MODEL_CATALOG[model] : undefined;
   if (info) {
     return { allowed: info.plans.includes(plan), multiplier: info.multiplier, known: true };
   }

@@ -260,6 +260,7 @@ export default function SorixDetailPage({ cfg }: { cfg: DetailConfig }) {
       </section>
 
       {/* PROBLEMS */}
+      {cfg.problems.length > 0 && (
       <section className="bg-[#f6f7fb] py-20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2
@@ -294,8 +295,10 @@ export default function SorixDetailPage({ cfg }: { cfg: DetailConfig }) {
           )}
         </div>
       </section>
+      )}
 
       {/* LEARNINGS */}
+      {cfg.learnings.length > 0 && (
       <section
         className="relative py-20 text-white"
         style={{ background: "linear-gradient(180deg, #061026 0%, #0a1734 100%)" }}
@@ -335,8 +338,10 @@ export default function SorixDetailPage({ cfg }: { cfg: DetailConfig }) {
           </div>
         </div>
       </section>
+      )}
 
       {/* CURRICULUM */}
+      {cfg.curriculum.length > 0 && (
       <section
         id="curriculum"
         className="relative py-20 text-white"
@@ -418,6 +423,7 @@ export default function SorixDetailPage({ cfg }: { cfg: DetailConfig }) {
           </div>
         </div>
       </section>
+      )}
 
       {/* MENTOR */}
       <section className="bg-gradient-to-b from-[#f6f7fb] to-white pt-20">
@@ -464,6 +470,7 @@ export default function SorixDetailPage({ cfg }: { cfg: DetailConfig }) {
       </section>
 
       {/* FAQ */}
+      {cfg.faqs.length > 0 && (
       <section className="bg-[#f6f7fb] py-20">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2
@@ -524,6 +531,7 @@ export default function SorixDetailPage({ cfg }: { cfg: DetailConfig }) {
           </div>
         </div>
       </section>
+      )}
 
       {/* ENROLL */}
       <section

@@ -1,11 +1,12 @@
 import { Link } from "react-router-dom";
 import { BookOpen, ArrowRight } from "lucide-react";
 import { useScholarsLang } from "@/contexts/ScholarsI18nContext";
-import { courses } from "@/data/academy";
+import { useCourses } from "@/hooks/useScholarsCatalog";
 
 export default function PopularCourses() {
     const { t } = useScholarsLang();
-    const featured = courses.slice(0, 1);
+    const { items } = useCourses();
+    const featured = items.slice(0, 3);
 
     return (
         <section className="bg-background py-14 sm:py-20">
@@ -27,9 +28,10 @@ export default function PopularCourses() {
 
                 <div className="grid lg:grid-cols-3 gap-5 sm:gap-6">
                     {featured.map((c, idx) => (
-                        <div
+                        <Link
                             key={c.slug}
-                            className="rounded-3xl bg-card border border-border overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition-all flex flex-col"
+                            to={`/sorixscholars/courses/${c.slug}`}
+                            className="group rounded-3xl bg-card border border-border overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition-all flex flex-col"
                         >
                             <div className="relative aspect-[16/10] overflow-hidden bg-muted">
                                 <img
@@ -60,13 +62,13 @@ export default function PopularCourses() {
                                 <div className="mt-5 pt-5 border-t border-border/60 flex items-center justify-between gap-3">
                                     <div className="text-lg sm:text-xl font-bold text-foreground">{c.priceLabel}</div>
                                     <span
-                                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary/10 text-primary text-xs sm:text-sm font-semibold whitespace-nowrap cursor-not-allowed"
+                                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary/10 text-primary text-xs sm:text-sm font-semibold whitespace-nowrap"
                                     >
-                                        {t("Comming Soon", "Comming Soon")} <ArrowRight className="w-3.5 h-3.5" />
+                                        {t("বিস্তারিত দেখুন", "View details")} <ArrowRight className="w-3.5 h-3.5" />
                                     </span>
                                 </div>
                             </div>
-                        </div>
+                        </Link>
                     ))}
                 </div>
 
