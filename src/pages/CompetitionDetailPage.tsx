@@ -1,25 +1,22 @@
-import { useEffect, useState } from "react";
 import { useParams, Navigate } from "react-router-dom";
 import { Calendar, Trophy, Globe } from "lucide-react";
 import SorixDetailPage from "@/components/scholars/SorixDetailPage";
-import { getCompetition } from "@/data/academy";
+import { useCompetition } from "@/hooks/useScholarsCatalog";
 import founderAsset from "@/assets/founder-rakib.jpg.asset.json";
-import { supabase } from "@/integrations/supabase/client";
 
 export default function CompetitionDetailPage() {
   const { slug = "" } = useParams();
-  const c = getCompetition(slug);
-  const [dbItem, setDbItem] = useState<any>(null);
-  useEffect(() => {
-    supabase.from("competitions").select("id, slug, title, entry_fee_bdt").eq("slug", slug).maybeSingle()
-      .then(({ data }) => setDbItem(data));
-  }, [slug]);
+  const { competition: c, isLoading } = useCompetition(slug);
+  if (isLoading) return <div className="min-h-[60vh]" />;
   if (!c) return <Navigate to="/sorixscholars/competitions" replace />;
 
   // Hard-coded Bangla detail content per competition slug
   const isStartup = c.slug === "startup-funding";
+  // Only the two original competitions have hand-written Bangla landing copy; any competition
+  // created in the admin is rendered from its own fields (prizes, rules, timeline, FAQs).
+  const rich = isStartup || c.slug === "ai-challenge";
 
-  const problems = isStartup
+  const problems = !rich ? [] : isStartup
     ? [
         "একটা ভালো AI আইডিয়া আছে, কিন্তু ফান্ডিং কোথা থেকে আসবে জানেন না।",
         "Investor pitch তৈরি করতে গিয়ে আটকে যাচ্ছেন।",
@@ -33,7 +30,9 @@ export default function CompetitionDetailPage() {
         "Cash prize ও real users পাওয়ার সুযোগ মিস করতে চান না।",
       ];
 
-  const learnings = isStartup
+  const learnings = !rich
+    ? c.prizes.map((p) => ({ title: p.place, desc: p.reward }))
+    : isStartup
     ? [
         { title: "Investor-ready pitch", desc: "১২ সপ্তাহে ১:১ মেন্টরিং নিয়ে নিজের pitch তৈরি করুন।" },
         { title: "Funding up to $50K", desc: "Winner team পাবে $50,000 ক্যাশ ফান্ডিং + launch runway।" },
@@ -54,11 +53,15 @@ export default function CompetitionDetailPage() {
 
   const faqs = [
     ...c.faqs.map((f) => ({ q: f.q, a: f.a })),
+    ...(!rich ? [] : [
     { q: "Worldwide কি apply করা যাবে?", a: "হ্যাঁ — competition সম্পূর্ণ online এবং বিশ্বের যে কোনো দেশ থেকে participate করা যাবে।" },
     { q: "Team size কত?", a: isStartup ? "Solo founder থেকে শুরু করে সর্বোচ্চ ৪ জনের team allowed।" : "Individual বা সর্বোচ্চ ৪ জনের team।" },
+  ]),
   ];
 
-  const perks = isStartup
+  const perks = !rich
+    ? [...c.prizes.map((p) => `${p.place}: ${p.reward}`), ...c.rules]
+    : isStartup
     ? [
         "Up to $50,000 funding",
         "১২ সপ্তাহের ১:১ mentorship",
@@ -86,7 +89,9 @@ export default function CompetitionDetailPage() {
         backLabel: "সব কম্পিটিশন",
 
         heroBadge: c.status,
-        heroTitleLines: isStartup
+        heroTitleLines: !rich
+          ? [c.title]
+          : isStartup
           ? ["SorixLab", "Startup Funding"]
           : ["SorixLab", "Build Challenge"],
         heroTagline: c.tagline,
@@ -98,7 +103,7 @@ export default function CompetitionDetailPage() {
         heroCoverUrl: c.cover,
         primaryCtaLabel: "Apply now",
         curriculumCtaLabel: "Timeline দেখুন",
-        deadlineISO: new Date(Date.now() + 14 * 86400000).toISOString(),
+        deadlineISO: c.deadlineAt ?? new Date(Date.now() + 14 * 86400000).toISOString(),
 
         problemsTitle: "কেন এই কম্পিটিশন আপনার জন্য?",
         problems,
@@ -134,8 +139,8 @@ export default function CompetitionDetailPage() {
 
         enrollKind: "competition",
         enrollSlug: c.slug,
-        enrollPriceBdt: dbItem ? Number(dbItem.entry_fee_bdt) : 0,
-        enrollItemTitle: dbItem?.title || c.title,
+        enrollPriceBdt: c.entryFeeBdt,
+        enrollItemTitle: c.title,
       }}
     />
   );

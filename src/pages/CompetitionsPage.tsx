@@ -1,9 +1,10 @@
 import { Link } from "react-router-dom";
 import { ArrowRight, Trophy } from "lucide-react";
 import SEOHead from "@/components/SEOHead";
-import { competitions } from "@/data/academy";
+import { useCompetitions } from "@/hooks/useScholarsCatalog";
 
 export default function CompetitionsPage() {
+  const { items: competitions, isLoading } = useCompetitions();
   return (
     <div className="bg-background min-h-screen">
       <SEOHead
@@ -26,6 +27,9 @@ export default function CompetitionsPage() {
         </div>
 
         <div className="grid sm:grid-cols-2 gap-5 sm:gap-6">
+          {!isLoading && competitions.length === 0 && (
+            <p className="col-span-full text-center text-muted-foreground">নতুন কম্পিটিশন শীঘ্রই আসছে।</p>
+          )}
           {competitions.map((c) => (
             <Link
               key={c.slug}

@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { MapPin, Calendar, Clock, ArrowRight } from "lucide-react";
 import { useScholarsLang } from "@/contexts/ScholarsI18nContext";
 import founderAsset from "@/assets/founder-rakib.jpg.asset.json";
+import { useWorkshops } from "@/hooks/useScholarsCatalog";
 
 interface WorkshopItem {
   slug: string;
@@ -18,29 +19,18 @@ interface WorkshopItem {
   timeBn: string;
   timeEn: string;
   location: string;
+  cover: string;
 }
-
-const items: WorkshopItem[] = [
-  {
-    slug: "ai-productivity-live",
-    badgeBn: "লাইভ ওয়ার্কশপ",
-    badgeEn: "Live workshop",
-    titleBn: "৩ দিনের AI লাইভ ওয়ার্কশপ",
-    titleEn: "3-day live AI workshop",
-    descBn: "প্রতিযোগিতায় টিকে থাকতে AI শেখার বিকল্প নেই। আপনার ৫ ঘণ্টার কাজ ৫ মিনিটে নামিয়ে আনতে জয়েন করুন এই প্র্যাকটিক্যাল সেশনে।",
-    descEn: "To stay competitive, learning AI is non-negotiable. Join this practical session to shrink 5 hours of work into 5 minutes.",
-    price: "$9",
-    oldPrice: "$19",
-    dateBn: "১৮-২০ জুন",
-    dateEn: "Jun 18-20",
-    timeBn: "রাত ৯:০০ টা",
-    timeEn: "9:00 PM",
-    location: "Google Meet",
-  },
-];
 
 export default function UpcomingWorkshops() {
   const { t, lang } = useScholarsLang();
+  const { items: workshops } = useWorkshops();
+  const items: WorkshopItem[] = workshops.slice(0, 2).map((w) => ({
+    slug: w.slug, badgeBn: w.badge, badgeEn: w.badge, titleBn: w.title, titleEn: w.title,
+    descBn: w.desc, descEn: w.desc, price: w.price, oldPrice: w.oldPrice, dateBn: w.date, dateEn: w.date,
+    timeBn: w.time, timeEn: w.time, location: w.location, cover: w.cover,
+  }));
+  if (items.length === 0) return null;
 
   return (
     <section
@@ -72,7 +62,7 @@ export default function UpcomingWorkshops() {
               style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))" }}
             >
               <div className="relative aspect-[16/10] lg:aspect-auto bg-black overflow-hidden">
-                <img src={founderAsset.url} alt={lang === "bn" ? w.titleBn : w.titleEn} className="w-full h-full object-cover opacity-90" />
+                <img src={w.cover || founderAsset.url} alt={lang === "bn" ? w.titleBn : w.titleEn} className="w-full h-full object-cover opacity-90" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                 <span className="absolute top-3 left-3 px-3 py-1 rounded-full bg-rose-500 text-white text-[11px] font-bold shadow">
                   {lang === "bn" ? w.badgeBn : w.badgeEn}

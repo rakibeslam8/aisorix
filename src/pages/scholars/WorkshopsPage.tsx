@@ -1,8 +1,10 @@
 import { MapPin, Calendar, Clock, ArrowRight } from "lucide-react";
 import SEOHead from "@/components/SEOHead";
-import { WORKSHOPS } from "@/data/workshops";
+import { Link } from "react-router-dom";
+import { useWorkshops } from "@/hooks/useScholarsCatalog";
 
 export default function WorkshopsPage() {
+  const { items: workshops, isLoading } = useWorkshops();
   return (
     <div className="bg-background min-h-screen">
       <SEOHead
@@ -25,10 +27,14 @@ export default function WorkshopsPage() {
         </div>
 
         <div className="grid sm:grid-cols-2 gap-5 sm:gap-6">
-          {WORKSHOPS.map((w) => (
-            <div
+          {!isLoading && workshops.length === 0 && (
+            <p className="col-span-full text-center text-muted-foreground">নতুন ওয়ার্কশপ শীঘ্রই আসছে।</p>
+          )}
+          {workshops.map((w) => (
+            <Link
               key={w.slug}
-              className="rounded-3xl bg-card border border-border overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition-all flex flex-col"
+              to={`/sorixscholars/workshops/${w.slug}`}
+              className="group rounded-3xl bg-card border border-border overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition-all flex flex-col"
             >
               <div className="relative aspect-[16/10] overflow-hidden bg-muted">
                 <img src={w.cover} alt={w.title} className="w-full h-full object-cover" loading="lazy" />
@@ -64,13 +70,13 @@ export default function WorkshopsPage() {
                     )}
                   </div>
                   <span
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary/10 text-primary text-xs sm:text-sm font-semibold whitespace-nowrap cursor-not-allowed"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary/10 text-primary text-xs sm:text-sm font-semibold whitespace-nowrap"
                   >
-                    Comming Soon <ArrowRight className="w-3.5 h-3.5" />
+                    বিস্তারিত দেখুন <ArrowRight className="w-3.5 h-3.5" />
                   </span>
                 </div>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       </section>

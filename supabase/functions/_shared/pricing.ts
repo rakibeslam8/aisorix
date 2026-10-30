@@ -17,7 +17,7 @@ export const PLAN_MONTHLY_PRICE_BDT: Record<string, number> = {
 };
 
 export function basePriceBdt(planId: unknown, cycle: unknown): number | null {
-  if (typeof planId !== "string" || !Object.hasOwn(PLAN_MONTHLY_PRICE_BDT, planId)) return null;
+  if (typeof planId !== "string" || !Object.prototype.hasOwnProperty.call(PLAN_MONTHLY_PRICE_BDT, planId)) return null;
   const monthly = PLAN_MONTHLY_PRICE_BDT[planId];
   if (cycle === "monthly") return monthly;
   if (cycle === "yearly") return Math.round(monthly * 12 * 0.8);

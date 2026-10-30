@@ -1,21 +1,14 @@
-import { useEffect, useState } from "react";
 import { useParams, Navigate } from "react-router-dom";
 import { Calendar, Clock, MapPin } from "lucide-react";
 import SorixDetailPage from "@/components/scholars/SorixDetailPage";
-import { getWorkshop } from "@/data/workshops";
+import { useWorkshop } from "@/hooks/useScholarsCatalog";
 import founderAsset from "@/assets/founder-rakib.jpg.asset.json";
-import { supabase } from "@/integrations/supabase/client";
 
 export default function WorkshopDetailPage() {
   const { slug = "" } = useParams();
-  const w = getWorkshop(slug);
-  const [dbItem, setDbItem] = useState<any>(null);
-  useEffect(() => {
-    supabase.from("workshops").select("id, slug, title, price_bdt, seats_total, seats_booked").eq("slug", slug).maybeSingle()
-      .then(({ data }) => setDbItem(data));
-  }, [slug]);
+  const { workshop: w, isLoading } = useWorkshop(slug);
+  if (isLoading) return <div className="min-h-[60vh]" />;
   if (!w) return <Navigate to="/sorixscholars/workshops" replace />;
-  const seatsLeft = dbItem?.seats_total ? Math.max(0, (dbItem.seats_total || 0) - (dbItem.seats_booked || 0)) : null;
 
   return (
     <SorixDetailPage
@@ -52,11 +45,10 @@ export default function WorkshopDetailPage() {
         curriculum: w.curriculum,
 
         mentorPill: "আপনার ইনস্ট্রাক্টর",
-        mentorName: "Md. Rakibul Islam",
-        mentorRole: "Founder, AI Sorix",
-        mentorBio:
-          "AI এবং টেকনোলজি নিয়ে কাজ করার দীর্ঘ অভিজ্ঞতা থেকে তিনি এই ওয়ার্কশপটি এমনভাবে সাজিয়েছেন যেনো যে কেউ খুব সহজেই AI শিখে নিজের কাজকে দ্রুত এবং প্রোডাক্টিভ করে তুলতে পারেন।",
-        mentorImageUrl: founderAsset.url,
+        mentorName: w.mentor.name,
+        mentorRole: w.mentor.role,
+        mentorBio: w.mentor.bio || "AI এবং টেকনোলজি নিয়ে কাজ করার দীর্ঘ অভিজ্ঞতা থেকে তিনি এই ওয়ার্কশপটি সাজিয়েছেন।",
+        mentorImageUrl: w.mentor.avatar || founderAsset.url,
 
         faqsTitle: "সচরাচর জিজ্ঞাসিত প্রশ্ন",
         faqs: w.faqs,
@@ -75,9 +67,9 @@ export default function WorkshopDetailPage() {
 
         enrollKind: "workshop",
         enrollSlug: w.slug,
-        enrollPriceBdt: dbItem ? Number(dbItem.price_bdt) : undefined,
-        enrollItemTitle: dbItem?.title || w.title,
-        enrollSeatsAvailable: seatsLeft,
+        enrollPriceBdt: w.priceBdt,
+        enrollItemTitle: w.title,
+        enrollSeatsAvailable: w.seatsLeft,
       }}
     />
   );

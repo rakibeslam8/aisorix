@@ -1,9 +1,10 @@
 import { BookOpen, ArrowRight } from "lucide-react";
 import SEOHead from "@/components/SEOHead";
-import { courses } from "@/data/academy";
+import { Link } from "react-router-dom";
+import { useCourses } from "@/hooks/useScholarsCatalog";
 
 export default function CoursesPage() {
-  const course = courses[0];
+  const { items: courses, isLoading } = useCourses();
 
   return (
     <div className="bg-background min-h-screen">
@@ -26,8 +27,12 @@ export default function CoursesPage() {
           </p>
         </div>
 
-        <div className="max-w-sm mx-auto">
-          <div className="rounded-3xl bg-card border border-border overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition-all flex flex-col">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+          {!isLoading && courses.length === 0 && (
+            <p className="col-span-full text-center text-muted-foreground">নতুন কোর্স শীঘ্রই আসছে।</p>
+          )}
+          {courses.map((course) => (
+          <Link key={course.slug} to={`/sorixscholars/courses/${course.slug}`} className="group rounded-3xl bg-card border border-border overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition-all flex flex-col">
             <div className="relative aspect-[16/10] overflow-hidden bg-muted">
               <img
                 src={course.cover}
@@ -55,13 +60,14 @@ export default function CoursesPage() {
               <div className="mt-5 pt-5 border-t border-border/60 flex items-center justify-between gap-3">
                 <div className="text-lg sm:text-xl font-bold text-foreground">{course.priceLabel}</div>
                 <span
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary/10 text-primary text-xs sm:text-sm font-semibold whitespace-nowrap cursor-not-allowed"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary/10 text-primary text-xs sm:text-sm font-semibold whitespace-nowrap"
                 >
-                  Comming Soon <ArrowRight className="w-3.5 h-3.5" />
+                  বিস্তারিত দেখুন <ArrowRight className="w-3.5 h-3.5" />
                 </span>
               </div>
             </div>
-          </div>
+          </Link>
+          ))}
         </div>
       </section>
     </div>
