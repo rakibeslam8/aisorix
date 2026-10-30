@@ -1,5 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getPlanLimits } from "../_shared/planLimits.ts";
+import { modelPolicy } from "../_shared/models.ts";
+import {
+  GUEST_WINDOW_DAYS, IP_LIMIT_MULTIPLIER, IP_WINDOW_DAYS, USER_WINDOW_DAYS,
+  addUsage, estimateTokens, getEffectivePlan, getUsage, ipUsageKey, messagesTokens, meterSse, remainingCharge,
+  type StreamSummary,
+} from "../_shared/usage.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,7 +18,7 @@ const corsHeaders = {
 //   Stage 2 — User's selected model writes the final response using the analysis as context
 // Stronger user-selected models skip Stage 1 and handle attachments themselves.
 const ANALYZER_MODEL = 'openai/gpt-5-mini';
-const DEFAULT_MODEL = 'openai/gpt-4o'; // Fallback for regular chat when no model is provided
+const DEFAULT_MODEL = 'openai/gpt-4o-mini'; // Fallback when no model is provided (a free-tier model)
 
 // Models capable enough to handle attachments directly without a Stage 1 analyzer pass.
 const STRONG_MODELS = new Set<string>([
@@ -180,6 +187,62 @@ serve(async (req) => {
       );
     }
 
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return new Response(
+        JSON.stringify({ error: 'messages array required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ===== Server-side limits =====
+    // The plan comes from the database, never from the request body (`userPlan` is ignored).
+    const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    const limits = await getPlanLimits(admin);
+    const plan = isGuest ? 'free' : await getEffectivePlan(admin, user.id);
+    const usageKey = isGuest ? `g:${guestId}` : `u:${user.id}`;
+    const windowDays = isGuest ? GUEST_WINDOW_DAYS : USER_WINDOW_DAYS;
+    const tokenLimit = isGuest ? limits.guest : limits.plans[plan];
+
+    const limitReached = (message: string) => new Response(
+      JSON.stringify({ error: 'TOKEN_LIMIT_REACHED', message, plan, limit: tokenLimit }),
+      { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+
+    // A null result means the ledger could not be read: fail open (logged) rather than take chat down.
+    const usedBefore = await getUsage(admin, usageKey, windowDays);
+    if (usedBefore !== null && usedBefore >= tokenLimit) {
+      return limitReached(isGuest
+        ? 'Free trial limit reached. Please sign up to continue.'
+        : "You've reached your token limit for this period. Please upgrade your plan.");
+    }
+
+    // Guests also share a per-IP daily budget so changing x-guest-id does not reset the limit.
+    let ipKey: string | null = null;
+    if (isGuest) {
+      ipKey = await ipUsageKey(req.headers);
+      if (ipKey) {
+        const ipUsed = await getUsage(admin, ipKey, IP_WINDOW_DAYS);
+        if (ipUsed !== null && ipUsed >= limits.guest * IP_LIMIT_MULTIPLIER) {
+          return limitReached('Too much guest usage from this network today. Please sign up to continue.');
+        }
+      }
+    }
+
+    const requestedModel = typeof model === 'string' && model ? model : DEFAULT_MODEL;
+    const policy = modelPolicy(requestedModel, plan);
+    if (!policy.allowed) {
+      return new Response(
+        JSON.stringify({ error: 'MODEL_NOT_ALLOWED', message: 'This model is not available on your plan.', plan }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    if (!policy.known) console.warn(`Unknown model "${requestedModel}" charged at ${policy.multiplier}x`);
+
+    const charge = async (tokens: number) => {
+      await addUsage(admin, usageKey, tokens, windowDays);
+      if (ipKey) await addUsage(admin, ipKey, tokens, IP_WINDOW_DAYS);
+    };
+
     // Generate system prompt with actual model name
     const systemPrompt = getSystemPrompt(modelName || 'AI Assistant');
 
@@ -207,7 +270,7 @@ serve(async (req) => {
           || lastUserMsg.content.includes('--- FILE CONTENT ---')
           || lastUserMsg.content.includes('📁 ATTACHED FILES'));
 
-    let selectedModel = model || DEFAULT_MODEL;
+    let selectedModel = requestedModel;
     const responderName = modelName || 'AI Assistant';
 
     // ===== STAGE 1: GPT-5 mini analyzer =====
@@ -242,6 +305,7 @@ serve(async (req) => {
         if (analyzerResponse.ok) {
           const analyzerData = await analyzerResponse.json();
           analysisText = analyzerData?.choices?.[0]?.message?.content || '';
+          await charge(analyzerData?.usage?.total_tokens ?? estimateTokens(analysisText));
           console.log(`✅ Stage 1 complete in ${Date.now() - analyzerStart}ms — analysis length: ${analysisText.length} chars`);
         } else {
           const errBody = await analyzerResponse.text();
@@ -331,6 +395,13 @@ serve(async (req) => {
       );
     }
 
+    // Upstream accepted the request: charge the input now, the rest when the response completes.
+    const inputEstimate = messagesTokens(processedMessages);
+    const preCharged = Math.round(inputEstimate * policy.multiplier);
+    await charge(preCharged);
+    const finish = (summary: StreamSummary) =>
+      charge(remainingCharge(inputEstimate, summary, policy.multiplier, preCharged));
+
     if (stream) {
       // For search models, we need to buffer and extract citations at the end
       if (isSearchModel && response.body) {
@@ -376,7 +447,7 @@ serve(async (req) => {
           }
         });
 
-        const transformedStream = response.body.pipeThrough(transformStream);
+        const transformedStream = response.body.pipeThrough(meterSse(finish)).pipeThrough(transformStream);
         
         return new Response(transformedStream, {
           headers: { 
@@ -390,7 +461,7 @@ serve(async (req) => {
 
       // Return streaming response for non-search models
       console.log("Returning streaming response");
-      return new Response(response.body, {
+      return new Response(response.body ? response.body.pipeThrough(meterSse(finish)) : response.body, {
         headers: { 
           ...corsHeaders, 
           'Content-Type': 'text/event-stream',
@@ -401,6 +472,7 @@ serve(async (req) => {
     } else {
       // Return non-streaming response with citations included
       const data = await response.json();
+      await finish({ text: String(data?.choices?.[0]?.message?.content ?? ''), usage: data?.usage });
       console.log("Returning non-streaming response");
       
       // Include citations in the response if available

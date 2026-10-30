@@ -331,7 +331,11 @@ export const useAIChat = () => {
               setError(errorMessage);
               setStreaming(false);
               
-              if (errorMessage.includes('429') || errorMessage.toLowerCase().includes('rate limit')) {
+              if (errorMessage.includes('TOKEN_LIMIT_REACHED')) {
+                toast.error("🪙 Token limit reached", { description: "You've used all your tokens for this period. Upgrade your plan to keep chatting." });
+              } else if (errorMessage.includes('MODEL_NOT_ALLOWED')) {
+                toast.error("🔒 Model not on your plan", { description: "Choose another model or upgrade your plan." });
+              } else if (errorMessage.includes('429') || errorMessage.toLowerCase().includes('rate limit')) {
                 toast.error("⏳ Rate Limited", { description: "Too many requests. Please wait a moment." });
               } else if (errorMessage.includes('401') || errorMessage.includes('403')) {
                 toast.error("🔒 Authentication Error", { description: "API authentication failed." });
@@ -365,7 +369,11 @@ export const useAIChat = () => {
       setStreaming(false);
       
       if (err.name !== 'AbortError') {
-        if (errorMessage.includes('429') || errorMessage.toLowerCase().includes('rate limit')) {
+        if (errorMessage.includes('TOKEN_LIMIT_REACHED')) {
+          toast.error("🪙 Token limit reached", { description: "You've used all your tokens for this period. Upgrade your plan to keep chatting." });
+        } else if (errorMessage.includes('MODEL_NOT_ALLOWED')) {
+          toast.error("🔒 Model not on your plan", { description: "Choose another model or upgrade your plan." });
+        } else if (errorMessage.includes('429') || errorMessage.toLowerCase().includes('rate limit')) {
           toast.error("⏳ Rate Limited", { description: "Too many requests." });
         } else if (errorMessage.includes('network') || errorMessage.includes('fetch') || errorMessage.includes('Failed to fetch')) {
           toast.error("🌐 Network Error", { description: "Unable to connect." });
