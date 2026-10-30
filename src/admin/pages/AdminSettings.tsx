@@ -47,8 +47,8 @@ export default function AdminSettings() {
       </Card></TabsContent>
 
       <TabsContent value="limits"><Card className="p-5 bg-white border-slate-200 space-y-3">
-        {["free_tokens", "basic_tokens", "pro_tokens", "premium_tokens"].map((k) => (
-          <div key={k}><label className="text-xs text-slate-600 capitalize">{k.replace("_", " ")}</label><Input type="number" value={settings.limits?.[k] ?? 0} onChange={(e) => patch("limits", k, Number(e.target.value))} /></div>
+        {["free_tokens", "basic_tokens", "pro_tokens", "premium_tokens", "premium_plus_tokens", "max_tokens", "enterprise_tokens", "guest_tokens"].map((k) => (
+          <div key={k}><label className="text-xs text-slate-600 capitalize">{k.replaceAll("_", " ")}</label><Input type="number" value={settings.limits?.[k] ?? 0} onChange={(e) => patch("limits", k, Number(e.target.value))} /></div>
         ))}
         <Button onClick={() => save("limits")} disabled={busy}><Save className="w-4 h-4 mr-1" /> Save</Button>
       </Card></TabsContent>

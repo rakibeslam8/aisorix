@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getPlanLimits, normalizePlan } from "../_shared/planLimits.ts";
+import { USER_WINDOW_DAYS, addUsage, getUsage } from "../_shared/usage.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,16 +16,6 @@ const ALLOWED_MODELS = ['deepseek/deepseek-v3.2', 'anthropic/claude-sonnet-4.5']
 const MODEL_MULTIPLIERS: Record<string, number> = {
   'deepseek/deepseek-v3.2': 1,
   'anthropic/claude-sonnet-4.5': 6,
-};
-
-const PLAN_TOKEN_LIMITS: Record<string, number> = {
-  free: 15000,
-  basic: 800000,
-  pro: 1500000,
-  premium: 3000000,
-  premium_plus: 7000000,
-  max: 17000000,
-  enterprise: 50000000,
 };
 
 const estimateTokens = (text: string): number => Math.ceil(text.length / 4);
@@ -75,6 +67,14 @@ serve(async (req) => {
 
     const { projectId, message, conversationHistory, userId, model, files } = await req.json();
 
+    // The caller may only act as themselves (this function uses the service-role key below).
+    if (userId && userId !== authUser.id) {
+      return new Response(
+        JSON.stringify({ error: 'User ID mismatch' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     if (!OPENROUTER_API_KEY) {
       console.error("OPENROUTER_API_KEY is not configured");
       return new Response(
@@ -121,9 +121,10 @@ serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
-    const planId = subscription?.plan_id || 'free';
-    const tokensUsed = subscription?.tokens_used || 0;
-    const tokensLimit = PLAN_TOKEN_LIMITS[planId] || 15000;
+    const planId = normalizePlan(subscription?.plan_id);
+    const limits = await getPlanLimits(supabase);
+    const tokensLimit = limits.plans[planId];
+    const tokensUsed = (await getUsage(supabase, `u:${userId}`, USER_WINDOW_DAYS)) ?? 0;
 
     if (tokensUsed >= tokensLimit) {
       return new Response(
@@ -256,12 +257,8 @@ Focus your responses on helping with this specific project. When the user has pr
             })
             .eq('id', projectId);
 
-          // Deduct from user's subscription
-          if (subscription) {
-            await supabase.from('subscriptions')
-              .update({ tokens_used: tokensUsed + totalTokens })
-              .eq('id', subscription.id);
-          }
+          // Deduct from the user's token ledger (atomic; also mirrored to subscriptions.tokens_used)
+          await addUsage(supabase, `u:${userId}`, totalTokens, USER_WINDOW_DAYS);
 
           console.log(`Project AI complete: output_tokens=${outputTokens}, total_deducted=${totalTokens}`);
           controller.close();

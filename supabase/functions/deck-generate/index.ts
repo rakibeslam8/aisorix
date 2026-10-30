@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getPromptAddendum, withAdminPrompt } from "../_shared/promptTemplates.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -206,7 +207,7 @@ Rules:${isSingle ? singleRules : deckRules}
       body: JSON.stringify({
         model: "openai/gpt-4o-mini",
         messages: [
-          { role: "system", content: systemPrompt },
+          { role: "system", content: withAdminPrompt(systemPrompt, await getPromptAddendum(createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!), 'deck')) },
           { role: "user", content: prompt },
         ],
         temperature: 0.7,
